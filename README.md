@@ -72,6 +72,28 @@ Or register a new account from the login page.
 - **Backend**: Node.js, Express
 - **Authentication**: JWT
 
+## Deployment to Vercel
+
+### Step 1: Set Root Directory in Vercel
+1. Go to Vercel Dashboard: https://vercel.com/jagaths-projects-f1951148
+2. Select your project: `helthcare-appoinment-system`
+3. Go to **Settings** → **General**
+4. Set **Root Directory** to: `frontend`
+5. Click **Save**
+
+### Step 2: Verify Build Settings
+- **Framework Preset**: Vite
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
+
+### Step 3: Environment Variables (Optional)
+Add in Vercel Settings → Environment Variables:
+- `VITE_API_BASE_URL`: Your backend API URL (e.g., `https://your-backend.com/api`)
+
+### Step 4: Deploy
+Vercel will automatically deploy when you push to GitHub, or click **Redeploy** in the Deployments tab.
+
 ## Project Structure
 
 ```
@@ -82,6 +104,7 @@ helthcare/
 │   │   ├── components/ # Reusable components
 │   │   ├── services/ # API services
 │   │   └── store/    # Vuex state management
+│   ├── vercel.json   # Vercel configuration
 │   └── package.json
 ├── mock-backend/     # Node.js mock API server
 │   ├── server.js     # Express server
@@ -89,97 +112,11 @@ helthcare/
 └── README.md
 ```
 
-## Features Overview
-
-### Patient Dashboard
-- Book appointments
-- View appointment history
-- Medical records
-- Profile management
-
-### Doctor Dashboard
-- Today's appointments queue
-- Upcoming appointments
-- Patient details and medical records
-- Schedule management
-
-### Admin Dashboard
-- User management
-- Appointments overview
-- System statistics
-- Settings
-
-## Deployment
-
-### Deploy to Vercel
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
-
-**Quick Deploy:**
-
-1. Push your code to GitHub
-2. Import project in [Vercel](https://vercel.com)
-3. Set root directory to `frontend`
-4. Add environment variable: `VITE_API_BASE_URL` (your backend API URL)
-5. Deploy!
-
-### Environment Variables
-
-For production, set these environment variables:
-
-- `VITE_API_BASE_URL`: Your backend API URL (e.g., `https://api.example.com/api`)
-
-## Project Structure
-
-```
-helthcare/
-├── frontend/              # Vue.js frontend application
-│   ├── src/
-│   │   ├── views/        # Page components
-│   │   ├── components/   # Reusable components
-│   │   ├── services/     # API services
-│   │   ├── store/        # Vuex state management
-│   │   ├── router/       # Vue Router configuration
-│   │   └── layouts/      # Layout components
-│   ├── public/           # Static assets
-│   ├── dist/             # Build output (generated)
-│   ├── package.json
-│   ├── vite.config.js    # Vite configuration
-│   └── vercel.json       # Vercel deployment config
-├── mock-backend/         # Node.js mock API server
-│   ├── server.js         # Express server
-│   └── package.json
-├── .github/
-│   └── workflows/        # GitHub Actions workflows
-├── .gitignore            # Git ignore rules
-├── vercel.json           # Root Vercel config
-├── DEPLOYMENT.md         # Deployment guide
-└── README.md             # This file
-```
-
 ## Notes
 
 - This is a mock backend for development purposes
 - All data is stored in memory (resets on server restart)
 - For production, replace with a real database backend
-- Frontend is configured to work with environment variables for API URLs
-
-## Troubleshooting
-
-### Frontend won't start
-- Check if port 5173 is available
-- Run `npm install` in the frontend directory
-- Check Node.js version (requires v16+)
-
-### API calls fail
-- Ensure backend is running on port 8000
-- Check `VITE_API_BASE_URL` environment variable
-- Verify CORS settings on backend
-
-### Build errors
-- Clear `node_modules` and reinstall: `rm -rf node_modules && npm install`
-- Check for TypeScript/ESLint errors
-- Verify all dependencies are installed
 
 ## License
 
