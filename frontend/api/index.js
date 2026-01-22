@@ -30,7 +30,9 @@ let doctors = [
   { id: 6, user_id: 8, specialization: 'General Medicine', license_number: 'LIC006', consultation_fee: 100.00, user: { id: 8, name: 'Dr. David Martinez', email: 'dmartinez@example.com', role: 'doctor' } }
 ];
 
+// Health check - handle both /api/health and /health
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.post('/api/auth/register', (req, res) => {
   const { name, email, password, role, phone } = req.body;
@@ -323,7 +325,13 @@ app.get('/api/payments', (req, res) => res.json({ data: [] }));
 app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
 // Vercel serverless function handler
-// When Vercel routes /api/* to this function, req.url already includes /api
+// Vercel routes /api/* to this function, but req.url doesn't include /api prefix
+// So we need to add it back for Express routes
 module.exports = (req, res) => {
+  const originalUrl = req.url;
+  // If URL doesn't start with /api, add it (Vercel strips it)
+  if (!originalUrl.startsWith('/api')) {
+    req.url = '/api' + (originalUrl === '/' ? '' : originalUrl);
+  }
   return app(req, res);
 };
