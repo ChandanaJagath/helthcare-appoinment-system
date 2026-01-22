@@ -3,7 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 const JWT_SECRET = 'your-secret-key-change-in-production';
 
 app.use(cors());
