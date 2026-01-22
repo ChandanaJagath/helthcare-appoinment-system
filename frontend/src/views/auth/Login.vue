@@ -1,5 +1,27 @@
 <template>
   <div class="auth-container">
+    <!-- Credentials Display - Top Right Corner -->
+    <div class="credentials-panel">
+      <div class="credentials-header">
+        <span class="credentials-icon">🔑</span>
+        <span class="credentials-title">Test Credentials</span>
+      </div>
+      <div class="credentials-content">
+        <div class="credential-item">
+          <strong>Admin:</strong>
+          <div class="credential-detail">admin@example.com / password123</div>
+        </div>
+        <div class="credential-item">
+          <strong>Doctor:</strong>
+          <div class="credential-detail">doctor@example.com / password123</div>
+        </div>
+        <div class="credential-item">
+          <strong>Patient:</strong>
+          <div class="credential-detail">patient@example.com / password123</div>
+        </div>
+      </div>
+    </div>
+    
     <div class="auth-background">
       <div class="auth-shapes">
         <div class="shape shape-1"></div>
@@ -275,6 +297,92 @@ export default {
   text-decoration: underline;
 }
 
+.credentials-panel {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  padding: 1rem;
+  z-index: 1000;
+  max-width: 280px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  animation: slideInRight 0.5s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.credentials-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--light-gray);
+}
+
+.credentials-icon {
+  font-size: 1rem;
+}
+
+.credentials-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+}
+
+.credentials-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.credential-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.credential-item strong {
+  color: var(--primary-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.credential-detail {
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .credentials-panel {
+    top: 0.5rem;
+    right: 0.5rem;
+    max-width: 240px;
+    padding: 0.75rem;
+    font-size: 0.6875rem;
+  }
+  
+  .credential-detail {
+    font-size: 0.625rem;
+  }
+}
+
 @media (max-width: 640px) {
   .auth-card {
     padding: 2rem 1.5rem;
@@ -282,6 +390,23 @@ export default {
   
   .auth-header h1 {
     font-size: 1.5rem;
+  }
+  
+  .credentials-panel {
+    max-width: 200px;
+    padding: 0.5rem;
+  }
+  
+  .credentials-title {
+    font-size: 0.75rem;
+  }
+  
+  .credential-item strong {
+    font-size: 0.6875rem;
+  }
+  
+  .credential-detail {
+    font-size: 0.5625rem;
   }
 }
 </style>
