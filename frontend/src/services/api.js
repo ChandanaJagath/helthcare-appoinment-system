@@ -1,13 +1,14 @@
 import axios from 'axios'
 import store from '../store'
 
-// Use environment variable or fallback to proxy for development
+// Use environment variable or fallback to relative path (same domain on Vercel)
 const getBaseURL = () => {
-  // In production (Vercel), use the full API URL from environment variable
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL
-  }
+  // In production (Vercel), API is on same domain, use relative path
   // In development, use proxy
+  if (import.meta.env.DEV) {
+    return '/api'
+  }
+  // Production: API is on same Vercel deployment
   return '/api'
 }
 
