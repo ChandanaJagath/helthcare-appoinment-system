@@ -323,13 +323,14 @@ export default {
   border-radius: var(--radius-lg);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   padding: 1.25rem;
-  z-index: 1000;
+  z-index: 10000;
   max-width: 300px;
   font-size: 0.75rem;
   border: 2px solid var(--primary-color);
   animation: slideInRight 0.5s ease-out;
   display: block !important;
   visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 @keyframes slideInRight {
@@ -415,6 +416,7 @@ export default {
     max-width: 240px;
     padding: 0.75rem;
     font-size: 0.6875rem;
+    z-index: 10000;
   }
   
   .credential-detail {
@@ -434,6 +436,9 @@ export default {
   .credentials-panel {
     max-width: 200px;
     padding: 0.5rem;
+    z-index: 10000;
+    top: 0.5rem;
+    right: 0.5rem;
   }
   
   .credentials-title {

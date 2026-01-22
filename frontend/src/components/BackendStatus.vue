@@ -86,6 +86,7 @@ export default {
   padding: 15px;
   z-index: 9999;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-top: 0;
 }
 
 .warning-content {
