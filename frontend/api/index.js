@@ -327,15 +327,32 @@ app.get('/api/payments', (req, res) => res.json({ data: [] }));
 app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
 // Vercel serverless function handler
-// Vercel automatically routes /api/* requests to this file
-// The req.url will be the path after /api (e.g., /auth/login for /api/auth/login)
+// When Vercel rewrites /api/(.*) to /api/index.js, req.url contains the captured group
+// Example: /api/auth/login -> req.url might be "auth/login" (no leading slash) or "/auth/login"
 module.exports = (req, res) => {
-  // Vercel strips /api prefix when routing, so we need to add it back
-  const path = req.url || req.path || '/';
+  // Get the original path from the request
+  let path = req.url || req.path || '';
   
-  // If path doesn't start with /api, add it
-  if (!path.startsWith('/api')) {
-    req.url = '/api' + (path === '/' ? '/health' : path);
+  // Normalize path: ensure it starts with /
+  if (path && !path.startsWith('/')) {
+    path = '/' + path;
+  }
+  
+  // If path is empty or root, default to health check
+  if (!path || path === '/') {
+    path = '/api/health';
+  } else if (!path.startsWith('/api')) {
+    // Vercel strips /api prefix during rewrite, so add it back
+    path = '/api' + path;
+  }
+  
+  // Update req.url and req.path so Express routes match correctly
+  req.url = path;
+  req.path = path;
+  
+  // Also update req.originalUrl for Express compatibility
+  if (!req.originalUrl) {
+    req.originalUrl = path;
   }
   
   // Handle the request with Express
