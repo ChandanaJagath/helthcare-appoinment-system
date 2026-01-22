@@ -335,45 +335,47 @@ app.get('/api/payments', (req, res) => res.json({ data: [] }));
 app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
 // Vercel serverless function handler
-// When Vercel rewrites /api/:path* to /api/index.js, the path is passed differently
-// We need to reconstruct the full path for Express routes
+// Vercel automatically routes /api/* to this file when it's in the api/ folder
+// When using rewrites, the path handling can vary, so we normalize it
 module.exports = (req, res) => {
   // Log incoming request for debugging (visible in Vercel function logs)
+  const originalUrl = req.url || req.path || '';
   console.log('Serverless function called:', {
     method: req.method,
-    url: req.url,
+    originalUrl: originalUrl,
     path: req.path,
-    originalUrl: req.originalUrl,
     query: req.query
   });
   
-  // Get the original path from the request
-  let path = req.url || req.path || '';
+  // Normalize the path
+  let normalizedPath = originalUrl;
   
-  // Normalize path: ensure it starts with /
-  if (path && !path.startsWith('/')) {
-    path = '/' + path;
+  // Ensure path starts with /
+  if (normalizedPath && !normalizedPath.startsWith('/')) {
+    normalizedPath = '/' + normalizedPath;
   }
   
-  // Handle empty or root path
-  if (!path || path === '/') {
-    path = '/api/health';
-  } else if (!path.startsWith('/api')) {
-    // Vercel strips /api prefix during rewrite, so add it back
-    path = '/api' + path;
+  // Handle empty or root path - default to health check
+  if (!normalizedPath || normalizedPath === '/') {
+    normalizedPath = '/api/health';
+  } 
+  // If path doesn't start with /api, add it (Vercel might strip it during rewrite)
+  else if (!normalizedPath.startsWith('/api')) {
+    normalizedPath = '/api' + normalizedPath;
   }
   
-  // Update req.url and req.path so Express routes match correctly
-  req.url = path;
-  req.path = path;
+  // Update request properties for Express routing
+  req.url = normalizedPath;
+  req.path = normalizedPath;
+  req.originalUrl = req.originalUrl || normalizedPath;
   
-  // Also update req.originalUrl for Express compatibility
-  if (!req.originalUrl) {
-    req.originalUrl = path;
-  }
-  
-  console.log('Normalized path:', path);
+  console.log('Normalized path for Express:', normalizedPath);
   
   // Handle the request with Express
-  return app(req, res);
+  try {
+    return app(req, res);
+  } catch (error) {
+    console.error('Error in serverless function:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
 };
