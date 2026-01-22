@@ -1,30 +1,5 @@
 <template>
   <div class="auth-container">
-    <!-- Credentials Display - Top Right Corner -->
-    <div class="credentials-panel">
-      <div class="credentials-header">
-        <span class="credentials-icon">🔑</span>
-        <span class="credentials-title">Test Credentials</span>
-      </div>
-      <div class="credentials-content">
-        <div class="credential-item" @click="fillCredentials('admin@example.com', 'password123')">
-          <strong>Admin:</strong>
-          <div class="credential-detail">admin@example.com / password123</div>
-          <span class="click-hint">Click to fill →</span>
-        </div>
-        <div class="credential-item" @click="fillCredentials('doctor@example.com', 'password123')">
-          <strong>Doctor:</strong>
-          <div class="credential-detail">doctor@example.com / password123</div>
-          <span class="click-hint">Click to fill →</span>
-        </div>
-        <div class="credential-item" @click="fillCredentials('patient@example.com', 'password123')">
-          <strong>Patient:</strong>
-          <div class="credential-detail">patient@example.com / password123</div>
-          <span class="click-hint">Click to fill →</span>
-        </div>
-      </div>
-    </div>
-    
     <div class="auth-background">
       <div class="auth-shapes">
         <div class="shape shape-1"></div>
@@ -110,11 +85,6 @@ export default {
   },
   methods: {
     ...mapActions('auth', ['login']),
-    fillCredentials(email, password) {
-      this.form.email = email
-      this.form.password = password
-      this.error = null
-    },
     async handleLogin() {
       this.loading = true
       this.error = null
@@ -314,116 +284,6 @@ export default {
   text-decoration: underline;
 }
 
-.credentials-panel {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(10px);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  padding: 1.25rem;
-  z-index: 10000;
-  max-width: 300px;
-  font-size: 0.75rem;
-  border: 2px solid var(--primary-color);
-  animation: slideInRight 0.5s ease-out;
-  display: block !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.credentials-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--light-gray);
-}
-
-.credentials-icon {
-  font-size: 1rem;
-}
-
-.credentials-title {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.8125rem;
-}
-
-.credentials-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.credential-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.5rem;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-}
-
-.credential-item:hover {
-  background: rgba(37, 99, 235, 0.1);
-  border-color: var(--primary-color);
-  transform: translateX(-3px);
-}
-
-.credential-item strong {
-  color: var(--primary-color);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.credential-detail {
-  color: var(--text-secondary);
-  font-size: 0.6875rem;
-  font-family: 'Courier New', monospace;
-  word-break: break-all;
-  line-height: 1.4;
-}
-
-.click-hint {
-  color: var(--primary-color);
-  font-size: 0.625rem;
-  font-weight: 600;
-  margin-top: 0.25rem;
-  opacity: 0.8;
-  font-style: italic;
-}
-
-@media (max-width: 768px) {
-  .credentials-panel {
-    top: 0.5rem;
-    right: 0.5rem;
-    max-width: 240px;
-    padding: 0.75rem;
-    font-size: 0.6875rem;
-    z-index: 10000;
-  }
-  
-  .credential-detail {
-    font-size: 0.625rem;
-  }
-}
-
 @media (max-width: 640px) {
   .auth-card {
     padding: 2rem 1.5rem;
@@ -431,26 +291,6 @@ export default {
   
   .auth-header h1 {
     font-size: 1.5rem;
-  }
-  
-  .credentials-panel {
-    max-width: 200px;
-    padding: 0.5rem;
-    z-index: 10000;
-    top: 0.5rem;
-    right: 0.5rem;
-  }
-  
-  .credentials-title {
-    font-size: 0.75rem;
-  }
-  
-  .credential-item strong {
-    font-size: 0.6875rem;
-  }
-  
-  .credential-detail {
-    font-size: 0.5625rem;
   }
 }
 </style>
