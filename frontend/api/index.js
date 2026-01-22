@@ -322,4 +322,9 @@ app.get('/api/admin/appointments', (req, res) => {
 app.get('/api/payments', (req, res) => res.json({ data: [] }));
 app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
-module.exports = app;
+// Vercel serverless function handler
+module.exports = (req, res) => {
+  // Remove /api prefix from path for Express routing
+  req.url = req.url.replace(/^\/api/, '') || '/';
+  return app(req, res);
+};
