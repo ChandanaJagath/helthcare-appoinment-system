@@ -1,14 +1,11 @@
 import axios from 'axios'
 import store from '../store'
 
-// Use environment variable or fallback to relative path (same domain on Vercel)
+// Use relative path - API is on same domain as frontend (Vercel serverless function)
 const getBaseURL = () => {
-  // In production (Vercel), API is on same domain, use relative path
-  // In development, use proxy
-  if (import.meta.env.DEV) {
-    return '/api'
-  }
-  // Production: API is on same Vercel deployment
+  // Always use relative path /api
+  // In development: Vite proxy handles /api -> localhost:8000
+  // In production: Vercel routes /api/* to serverless function
   return '/api'
 }
 
