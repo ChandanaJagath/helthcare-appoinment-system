@@ -7,17 +7,20 @@
         <span class="credentials-title">Test Credentials</span>
       </div>
       <div class="credentials-content">
-        <div class="credential-item">
+        <div class="credential-item" @click="fillCredentials('admin@example.com', 'password123')">
           <strong>Admin:</strong>
           <div class="credential-detail">admin@example.com / password123</div>
+          <span class="click-hint">Click to fill →</span>
         </div>
-        <div class="credential-item">
+        <div class="credential-item" @click="fillCredentials('doctor@example.com', 'password123')">
           <strong>Doctor:</strong>
           <div class="credential-detail">doctor@example.com / password123</div>
+          <span class="click-hint">Click to fill →</span>
         </div>
-        <div class="credential-item">
+        <div class="credential-item" @click="fillCredentials('patient@example.com', 'password123')">
           <strong>Patient:</strong>
           <div class="credential-detail">patient@example.com / password123</div>
+          <span class="click-hint">Click to fill →</span>
         </div>
       </div>
     </div>
@@ -107,6 +110,11 @@ export default {
   },
   methods: {
     ...mapActions('auth', ['login']),
+    fillCredentials(email, password) {
+      this.form.email = email
+      this.form.password = password
+      this.error = null
+    },
     async handleLogin() {
       this.loading = true
       this.error = null
@@ -301,16 +309,18 @@ export default {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(10px);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  padding: 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  padding: 1.25rem;
   z-index: 1000;
-  max-width: 280px;
+  max-width: 300px;
   font-size: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--primary-color);
   animation: slideInRight 0.5s ease-out;
+  display: block !important;
+  visibility: visible !important;
 }
 
 @keyframes slideInRight {
@@ -353,6 +363,17 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.credential-item:hover {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: var(--primary-color);
+  transform: translateX(-3px);
 }
 
 .credential-item strong {
@@ -367,6 +388,15 @@ export default {
   font-family: 'Courier New', monospace;
   word-break: break-all;
   line-height: 1.4;
+}
+
+.click-hint {
+  color: var(--primary-color);
+  font-size: 0.625rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+  opacity: 0.8;
+  font-style: italic;
 }
 
 @media (max-width: 768px) {
