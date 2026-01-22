@@ -324,7 +324,11 @@ app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment
 
 // Vercel serverless function handler
 module.exports = (req, res) => {
-  // Remove /api prefix from path for Express routing
-  req.url = req.url.replace(/^\/api/, '') || '/';
+  // Vercel passes the path without /api prefix when routing to /api/index.js
+  // But our Express routes expect /api prefix, so we need to add it back
+  const originalUrl = req.url;
+  if (!originalUrl.startsWith('/api')) {
+    req.url = '/api' + (originalUrl === '/' ? '' : originalUrl);
+  }
   return app(req, res);
 };
