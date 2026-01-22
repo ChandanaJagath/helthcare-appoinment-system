@@ -30,11 +30,19 @@ let doctors = [
   { id: 6, user_id: 8, specialization: 'General Medicine', license_number: 'LIC006', consultation_fee: 100.00, user: { id: 8, name: 'Dr. David Martinez', email: 'dmartinez@example.com', role: 'doctor' } }
 ];
 
-// Health check - handle both /api/health and /health
-// Health check - handle both with and without /api prefix
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-app.get('/', (req, res) => res.json({ status: 'ok', message: 'API serverless function is running' }));
+// Health check - handle multiple paths for robustness
+app.get('/api/health', (req, res) => {
+  console.log('Health check called via /api/health');
+  res.json({ status: 'ok', message: 'API serverless function is running' });
+});
+app.get('/health', (req, res) => {
+  console.log('Health check called via /health');
+  res.json({ status: 'ok', message: 'API serverless function is running' });
+});
+app.get('/api', (req, res) => {
+  console.log('Health check called via /api');
+  res.json({ status: 'ok', message: 'API serverless function is running' });
+});
 
 app.post('/api/auth/register', (req, res) => {
   const { name, email, password, role, phone } = req.body;
@@ -327,9 +335,18 @@ app.get('/api/payments', (req, res) => res.json({ data: [] }));
 app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
 // Vercel serverless function handler
-// When Vercel rewrites /api/(.*) to /api/index.js, req.url contains the captured group
-// Example: /api/auth/login -> req.url might be "auth/login" (no leading slash) or "/auth/login"
+// When Vercel rewrites /api/:path* to /api/index.js, the path is passed differently
+// We need to reconstruct the full path for Express routes
 module.exports = (req, res) => {
+  // Log incoming request for debugging (visible in Vercel function logs)
+  console.log('Serverless function called:', {
+    method: req.method,
+    url: req.url,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    query: req.query
+  });
+  
   // Get the original path from the request
   let path = req.url || req.path || '';
   
@@ -338,7 +355,7 @@ module.exports = (req, res) => {
     path = '/' + path;
   }
   
-  // If path is empty or root, default to health check
+  // Handle empty or root path
   if (!path || path === '/') {
     path = '/api/health';
   } else if (!path.startsWith('/api')) {
@@ -354,6 +371,8 @@ module.exports = (req, res) => {
   if (!req.originalUrl) {
     req.originalUrl = path;
   }
+  
+  console.log('Normalized path:', path);
   
   // Handle the request with Express
   return app(req, res);
