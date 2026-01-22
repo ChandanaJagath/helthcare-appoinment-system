@@ -129,7 +129,16 @@ export default {
           this.$router.push('/admin/dashboard')
         }
       } catch (error) {
-        this.error = error.response?.data?.message || 'Login failed. Please check your credentials and try again.'
+        console.error('Login error:', error)
+        if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error') || error.message?.includes('Backend server')) {
+          this.error = 'Backend API is not available. The backend server needs to be running. For local development, start the backend with: cd mock-backend && node server.js'
+        } else if (error.response?.status === 401) {
+          this.error = 'Invalid credentials. Please check your email and password.'
+        } else if (error.response?.data?.message) {
+          this.error = error.response.data.message
+        } else {
+          this.error = 'Login failed. Please check your credentials and try again.'
+        }
       } finally {
         this.loading = false
       }
