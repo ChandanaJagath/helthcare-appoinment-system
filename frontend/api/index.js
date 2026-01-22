@@ -31,8 +31,10 @@ let doctors = [
 ];
 
 // Health check - handle both /api/health and /health
+// Health check - handle both with and without /api prefix
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/', (req, res) => res.json({ status: 'ok', message: 'API serverless function is running' }));
 
 app.post('/api/auth/register', (req, res) => {
   const { name, email, password, role, phone } = req.body;
@@ -325,13 +327,26 @@ app.get('/api/payments', (req, res) => res.json({ data: [] }));
 app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
 // Vercel serverless function handler
-// Vercel routes /api/* to this function, but req.url doesn't include /api prefix
-// So we need to add it back for Express routes
+// When Vercel routes /api/* to this function, the path might or might not include /api
 module.exports = (req, res) => {
-  const originalUrl = req.url;
-  // If URL doesn't start with /api, add it (Vercel strips it)
-  if (!originalUrl.startsWith('/api')) {
-    req.url = '/api' + (originalUrl === '/' ? '' : originalUrl);
+  const originalUrl = req.url || req.path || '/';
+  
+  // Debug logging (remove in production if needed)
+  console.log('Serverless function called:', {
+    method: req.method,
+    originalUrl: originalUrl,
+    path: req.path,
+    url: req.url
+  });
+  
+  // If URL doesn't start with /api, add it (Vercel might strip it)
+  if (!originalUrl.startsWith('/api') && originalUrl !== '/') {
+    req.url = '/api' + originalUrl;
+    req.path = '/api' + (req.path || originalUrl);
+  } else if (originalUrl === '/') {
+    // Root path - keep as is for health check
+    req.url = '/api/health';
   }
+  
   return app(req, res);
 };
