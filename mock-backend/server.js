@@ -1,78 +1,29 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
+// Import models
+const userModel = require('./models/userModel');
+const doctorModel = require('./models/doctorModel');
+const appointmentModel = require('./models/appointmentModel');
+
 const app = express();
 const PORT = process.env.PORT || 8000;
-const JWT_SECRET = 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 app.use(cors());
 app.use(express.json());
 
-// Mock data
-let users = [
-  { id: 1, name: 'John Doe', email: 'patient@example.com', role: 'patient', password: 'password123' },
-  { id: 2, name: 'Dr. Sarah Smith', email: 'doctor@example.com', role: 'doctor', password: 'password123' },
-  { id: 3, name: 'Admin User', email: 'admin@example.com', role: 'admin', password: 'password123' },
-  { id: 4, name: 'Dr. Michael Johnson', email: 'mjohnson@example.com', role: 'doctor', password: 'password123' },
-  { id: 5, name: 'Dr. Emily Davis', email: 'edavis@example.com', role: 'doctor', password: 'password123' },
-  { id: 6, name: 'Dr. Robert Wilson', email: 'rwilson@example.com', role: 'doctor', password: 'password123' },
-  { id: 7, name: 'Dr. Jennifer Brown', email: 'jbrown@example.com', role: 'doctor', password: 'password123' },
-  { id: 8, name: 'Dr. David Martinez', email: 'dmartinez@example.com', role: 'doctor', password: 'password123' }
-];
-
-let appointments = [];
-let doctors = [
-  { 
-    id: 1, 
-    user_id: 2, 
-    specialization: 'Cardiology', 
-    license_number: 'LIC001', 
-    consultation_fee: 150.00,
-    user: { id: 2, name: 'Dr. Sarah Smith', email: 'doctor@example.com', role: 'doctor' }
-  },
-  { 
-    id: 2, 
-    user_id: 4, 
-    specialization: 'Pediatrics', 
-    license_number: 'LIC002', 
-    consultation_fee: 120.00,
-    user: { id: 4, name: 'Dr. Michael Johnson', email: 'mjohnson@example.com', role: 'doctor' }
-  },
-  { 
-    id: 3, 
-    user_id: 5, 
-    specialization: 'Dermatology', 
-    license_number: 'LIC003', 
-    consultation_fee: 130.00,
-    user: { id: 5, name: 'Dr. Emily Davis', email: 'edavis@example.com', role: 'doctor' }
-  },
-  { 
-    id: 4, 
-    user_id: 6, 
-    specialization: 'Orthopedics', 
-    license_number: 'LIC004', 
-    consultation_fee: 180.00,
-    user: { id: 6, name: 'Dr. Robert Wilson', email: 'rwilson@example.com', role: 'doctor' }
-  },
-  { 
-    id: 5, 
-    user_id: 7, 
-    specialization: 'Neurology', 
-    license_number: 'LIC005', 
-    consultation_fee: 200.00,
-    user: { id: 7, name: 'Dr. Jennifer Brown', email: 'jbrown@example.com', role: 'doctor' }
-  },
-  { 
-    id: 6, 
-    user_id: 8, 
-    specialization: 'General Medicine', 
-    license_number: 'LIC006', 
-    consultation_fee: 100.00,
-    user: { id: 8, name: 'Dr. David Martinez', email: 'dmartinez@example.com', role: 'doctor' }
-  }
-];
-
+// Root route - API info (frontend runs on a different port, e.g. http://localhost:5173)
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Healthcare API server',
+    docs: 'Use the frontend at http://localhost:5173 (run: cd frontend && npm run dev)',
+    health: '/api/health',
+    login: 'POST /api/auth/login'
+  });
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -80,49 +31,75 @@ app.get('/api/health', (req, res) => {
 });
 
 // Auth routes
-app.post('/api/auth/register', (req, res) => {
-  const { name, email, password, role, phone } = req.body;
-  const newUser = {
-    id: users.length + 1,
-    name,
-    email,
-    role: role || 'patient',
-    phone: phone || null,
-    password
-  };
-  users.push(newUser);
-  
-  const token = jwt.sign({ id: newUser.id, role: newUser.role }, JWT_SECRET);
-  res.json({ message: 'User registered successfully', user: { ...newUser, password: undefined }, token });
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, password, role, phone } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await userModel.findByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+    
+    const newUser = await userModel.create({ name, email, password, role, phone });
+    
+    // If doctor role, create doctor profile
+    if (role === 'doctor') {
+      await doctorModel.create({
+        user_id: newUser.id,
+        specialization: req.body.specialization || 'General Medicine',
+        license_number: req.body.license_number || `LIC${Date.now()}`,
+        consultation_fee: req.body.consultation_fee || 100.00
+      });
+    }
+    
+    const token = jwt.sign({ id: newUser.id, role: newUser.role }, JWT_SECRET);
+    res.json({ message: 'User registered successfully', user: newUser, token });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Registration failed', error: error.message });
+  }
 });
 
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body;
-  const user = users.find(u => u.email === email && u.password === password);
-  
-  if (!user) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await userModel.findByEmail(email);
+    
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    const isValidPassword = await userModel.verifyPassword(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET);
+    const userWithoutPassword = await userModel.findById(user.id);
+    res.json({ message: 'Login successful', token, user: userWithoutPassword });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Login failed', error: error.message });
   }
-  
-  const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET);
-  res.json({ message: 'Login successful', token, user: { ...user, password: undefined } });
 });
 
 app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Successfully logged out' });
 });
 
-app.get('/api/auth/me', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthenticated' });
-  }
-  
+app.get('/api/auth/me', async (req, res) => {
   try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthenticated' });
+    }
+    
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = users.find(u => u.id === decoded.id);
+    const user = await userModel.findById(decoded.id);
+    
     if (user) {
-      res.json({ ...user, password: undefined });
+      res.json(user);
     } else {
       res.status(401).json({ message: 'User not found' });
     }
@@ -132,80 +109,55 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // Appointments
-app.get('/api/appointments', (req, res) => {
-  const appointmentsWithDoctors = appointments.map(apt => {
-    const doctor = doctors.find(d => d.id === apt.doctor_id);
-    if (doctor && doctor.user) {
-      return {
-        ...apt,
-        doctor: {
-          ...doctor,
-          user: doctor.user
-        }
-      };
-    }
-    return {
-      ...apt,
-      doctor: doctor || null
-    };
-  });
-  res.json({ data: appointmentsWithDoctors });
+app.get('/api/appointments', async (req, res) => {
+  try {
+    const appointments = await appointmentModel.findAll();
+    res.json({ data: appointments });
+  } catch (error) {
+    console.error('Get appointments error:', error);
+    res.status(500).json({ message: 'Failed to fetch appointments', error: error.message });
+  }
 });
 
-app.post('/api/appointments', (req, res) => {
-  const { doctor_id, appointment_date, appointment_time, duration, reason } = req.body;
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthenticated' });
-  }
-  
+app.post('/api/appointments', async (req, res) => {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const doctor = doctors.find(d => d.id === parseInt(doctor_id));
-    const patient = users.find(u => u.id === decoded.id);
+    const { doctor_id, appointment_date, appointment_time, duration, reason } = req.body;
+    const token = req.headers.authorization?.replace('Bearer ', '');
     
-    // Ensure doctor has user info - always use the user from doctors array
-    let doctorWithUser = null;
-    if (doctor) {
-      doctorWithUser = {
-        id: doctor.id,
-        user_id: doctor.user_id,
-        specialization: doctor.specialization,
-        license_number: doctor.license_number,
-        consultation_fee: doctor.consultation_fee,
-        user: doctor.user ? {
-          id: doctor.user.id,
-          name: doctor.user.name,
-          email: doctor.user.email,
-          role: doctor.user.role
-        } : null
-      };
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthenticated' });
     }
     
-    const newAppointment = {
-      id: appointments.length + 1,
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const newAppointment = await appointmentModel.create({
       patient_id: decoded.id,
       doctor_id: parseInt(doctor_id),
       appointment_date,
       appointment_time,
-      duration: duration || 30,
-      status: 'pending',
-      reason,
-      created_at: new Date().toISOString(),
-      doctor: doctorWithUser,
-      patient: patient ? { ...patient, password: undefined } : null
-    };
-    appointments.push(newAppointment);
+      duration,
+      reason
+    });
+    
     res.status(201).json(newAppointment);
   } catch (error) {
-    res.status(401).json({ message: 'Invalid token' });
+    console.error('Create appointment error:', error);
+    if (error.message === 'Invalid token') {
+      res.status(401).json({ message: 'Invalid token' });
+    } else {
+      res.status(500).json({ message: 'Failed to create appointment', error: error.message });
+    }
   }
 });
 
 // Get all doctors
-app.get('/api/doctors', (req, res) => {
-  res.json({ data: doctors });
+app.get('/api/doctors', async (req, res) => {
+  try {
+    const doctors = await doctorModel.findAll();
+    res.json({ data: doctors });
+  } catch (error) {
+    console.error('Get doctors error:', error);
+    res.status(500).json({ message: 'Failed to fetch doctors', error: error.message });
+  }
 });
 
 app.get('/api/appointments/available-slots', (req, res) => {
@@ -220,34 +172,18 @@ app.get('/api/appointments/available-slots', (req, res) => {
 });
 
 // Patient routes
-app.get('/api/patients/appointments', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthenticated' });
-  }
-  
+app.get('/api/patients/appointments', async (req, res) => {
   try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthenticated' });
+    }
+    
     const decoded = jwt.verify(token, JWT_SECRET);
-    const patientAppointments = appointments
-      .filter(a => a.patient_id === decoded.id)
-      .map(apt => {
-        const doctor = doctors.find(d => d.id === apt.doctor_id);
-        if (doctor && doctor.user) {
-          return {
-            ...apt,
-            doctor: {
-              ...doctor,
-              user: doctor.user
-            }
-          };
-        }
-        return {
-          ...apt,
-          doctor: doctor || null
-        };
-      });
+    const patientAppointments = await appointmentModel.findByPatientId(decoded.id);
     res.json(patientAppointments);
   } catch (error) {
+    console.error('Get patient appointments error:', error);
     res.status(401).json({ message: 'Invalid token' });
   }
 });
@@ -261,43 +197,29 @@ app.get('/api/patients/prescriptions', (req, res) => {
 });
 
 // Doctor routes
-app.get('/api/doctors/dashboard', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthenticated' });
-  }
-  
+app.get('/api/doctors/dashboard', async (req, res) => {
   try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthenticated' });
+    }
+    
     const decoded = jwt.verify(token, JWT_SECRET);
-    const doctor = doctors.find(d => d.user_id === decoded.id);
+    const doctor = await doctorModel.findByUserId(decoded.id);
     
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor profile not found' });
     }
     
     const today = new Date().toISOString().split('T')[0];
-    const doctorAppointments = appointments.filter(a => a.doctor_id === doctor.id);
+    const doctorAppointments = await appointmentModel.findByDoctorId(doctor.id);
     
     const todayAppointments = doctorAppointments
       .filter(a => a.appointment_date === today && ['pending', 'confirmed'].includes(a.status))
-      .map(apt => {
-        const patient = users.find(u => u.id === apt.patient_id);
-        return {
-          ...apt,
-          patient: patient ? { ...patient, password: undefined } : null
-        };
-      })
       .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time));
     
     const upcomingAppointments = doctorAppointments
       .filter(a => a.appointment_date > today && ['pending', 'confirmed'].includes(a.status))
-      .map(apt => {
-        const patient = users.find(u => u.id === apt.patient_id);
-        return {
-          ...apt,
-          patient: patient ? { ...patient, password: undefined } : null
-        };
-      })
       .sort((a, b) => {
         const dateCompare = a.appointment_date.localeCompare(b.appointment_date);
         return dateCompare !== 0 ? dateCompare : a.appointment_time.localeCompare(b.appointment_time);
@@ -309,7 +231,7 @@ app.get('/api/doctors/dashboard', (req, res) => {
     // Calculate week start (Monday)
     const now = new Date();
     const dayOfWeek = now.getDay();
-    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
     const weekStart = new Date(now.setDate(diff));
     weekStart.setHours(0, 0, 0, 0);
     const weekStartStr = weekStart.toISOString().split('T')[0];
@@ -340,13 +262,13 @@ app.get('/api/doctors/dashboard', (req, res) => {
     )];
     
     const recentPatients = recentPatientIds.map(pid => {
-      const patient = users.find(u => u.id === pid);
+      const patientAppointment = doctorAppointments.find(a => a.patient_id === pid);
       const patientAppointments = doctorAppointments.filter(a => a.patient_id === pid);
-      return patient ? {
-        id: patient.id,
-        name: patient.name,
-        email: patient.email,
-        phone: patient.phone || 'N/A',
+      return patientAppointment ? {
+        id: patientAppointment.patient.id,
+        name: patientAppointment.patient.name,
+        email: patientAppointment.patient.email,
+        phone: patientAppointment.patient.phone || 'N/A',
         total_appointments: patientAppointments.length,
         last_appointment: patientAppointments.length > 0 
           ? patientAppointments.sort((a, b) => {
@@ -375,77 +297,59 @@ app.get('/api/doctors/dashboard', (req, res) => {
       recent_patients: recentPatients
     });
   } catch (error) {
+    console.error('Doctor dashboard error:', error);
     res.status(401).json({ message: 'Invalid token' });
   }
 });
 
-app.get('/api/doctors/appointments', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthenticated' });
-  }
-  
+app.get('/api/doctors/appointments', async (req, res) => {
   try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthenticated' });
+    }
+    
     const decoded = jwt.verify(token, JWT_SECRET);
-    const doctor = doctors.find(d => d.user_id === decoded.id);
+    const doctor = await doctorModel.findByUserId(decoded.id);
     
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor profile not found' });
     }
     
-    const doctorAppointments = appointments
-      .filter(a => a.doctor_id === doctor.id)
-      .map(apt => {
-        const patient = users.find(u => u.id === apt.patient_id);
-        const doctorData = doctors.find(d => d.id === apt.doctor_id);
-        return {
-          ...apt,
-          patient: patient ? { ...patient, password: undefined } : null,
-          doctor: doctorData ? {
-            ...doctorData,
-            user: doctorData.user
-          } : null
-        };
-      });
-    
+    const doctorAppointments = await appointmentModel.findByDoctorId(doctor.id);
     res.json({ data: doctorAppointments });
   } catch (error) {
+    console.error('Get doctor appointments error:', error);
     res.status(401).json({ message: 'Invalid token' });
   }
 });
 
 // Get patient details for doctor
-app.get('/api/doctors/patients/:id', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthenticated' });
-  }
-  
+app.get('/api/doctors/patients/:id', async (req, res) => {
   try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthenticated' });
+    }
+    
     const decoded = jwt.verify(token, JWT_SECRET);
-    const doctor = doctors.find(d => d.user_id === decoded.id);
+    const doctor = await doctorModel.findByUserId(decoded.id);
     
     if (!doctor) {
       return res.status(404).json({ message: 'Doctor profile not found' });
     }
     
     const patientId = parseInt(req.params.id);
-    const patient = users.find(u => u.id === patientId && u.role === 'patient');
+    const patient = await userModel.findById(patientId);
     
-    if (!patient) {
+    if (!patient || patient.role !== 'patient') {
       return res.status(404).json({ message: 'Patient not found' });
     }
     
     // Get patient's appointments with this doctor
-    const patientAppointments = appointments
-      .filter(a => a.patient_id === patientId && a.doctor_id === doctor.id)
-      .map(apt => ({
-        ...apt,
-        doctor: {
-          ...doctor,
-          user: doctor.user
-        }
-      }))
+    const allAppointments = await appointmentModel.findByDoctorId(doctor.id);
+    const patientAppointments = allAppointments
+      .filter(a => a.patient_id === patientId)
       .sort((a, b) => {
         const dateCompare = b.appointment_date.localeCompare(a.appointment_date);
         return dateCompare !== 0 ? dateCompare : b.appointment_time.localeCompare(a.appointment_time);
@@ -463,10 +367,7 @@ app.get('/api/doctors/patients/:id', (req, res) => {
       }));
     
     res.json({
-      patient: {
-        ...patient,
-        password: undefined
-      },
+      patient: patient,
       appointments: patientAppointments,
       medical_records: medicalRecords,
       stats: {
@@ -476,177 +377,141 @@ app.get('/api/doctors/patients/:id', (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Get patient details error:', error);
     res.status(401).json({ message: 'Invalid token' });
   }
 });
 
 // Admin routes
-app.get('/api/admin/dashboard', (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
-  
-  const appointmentsWithDetails = appointments.map(apt => {
-    const patient = users.find(u => u.id === apt.patient_id);
-    const doctor = doctors.find(d => d.id === apt.doctor_id);
-    return {
-      ...apt,
-      patient: patient ? { ...patient, password: undefined } : null,
-      doctor: doctor ? {
-        ...doctor,
-        user: doctor.user
-      } : null
-    };
-  });
-  
-  res.json({
-    stats: {
-      total_users: users.length,
-      total_patients: users.filter(u => u.role === 'patient').length,
-      total_doctors: doctors.length,
-      total_appointments: appointments.length,
-      pending_appointments: appointments.filter(a => a.status === 'pending').length,
-      confirmed_appointments: appointments.filter(a => a.status === 'confirmed').length,
-      completed_appointments: appointments.filter(a => a.status === 'completed').length,
-      cancelled_appointments: appointments.filter(a => a.status === 'cancelled').length,
-      today_appointments: appointments.filter(a => a.appointment_date === today).length,
-      total_revenue: appointments
-        .filter(a => a.status === 'completed')
-        .reduce((sum, apt) => {
-          const doctor = doctors.find(d => d.id === apt.doctor_id);
-          return sum + (doctor?.consultation_fee || 0);
-        }, 0)
-    },
-    recent_appointments: appointmentsWithDetails
+app.get('/api/admin/dashboard', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const appointments = await appointmentModel.findAll();
+    const totalUsers = await userModel.count();
+    const totalPatients = await userModel.countByRole('patient');
+    const totalDoctors = await doctorModel.count();
+    const totalRevenue = await appointmentModel.getTotalRevenue();
+    
+    const recentAppointments = appointments
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 10)
-  });
+      .slice(0, 10);
+    
+    res.json({
+      stats: {
+        total_users: totalUsers,
+        total_patients: totalPatients,
+        total_doctors: totalDoctors,
+        total_appointments: appointments.length,
+        pending_appointments: appointments.filter(a => a.status === 'pending').length,
+        confirmed_appointments: appointments.filter(a => a.status === 'confirmed').length,
+        completed_appointments: appointments.filter(a => a.status === 'completed').length,
+        cancelled_appointments: appointments.filter(a => a.status === 'cancelled').length,
+        today_appointments: appointments.filter(a => a.appointment_date === today).length,
+        total_revenue: totalRevenue
+      },
+      recent_appointments: recentAppointments
+    });
+  } catch (error) {
+    console.error('Admin dashboard error:', error);
+    res.status(500).json({ message: 'Failed to fetch dashboard data', error: error.message });
+  }
 });
 
-app.get('/api/admin/users', (req, res) => {
-  let filteredUsers = [...users];
-  
-  if (req.query.role) {
-    filteredUsers = filteredUsers.filter(u => u.role === req.query.role);
-  }
-  
-  if (req.query.search) {
-    const search = req.query.search.toLowerCase();
-    filteredUsers = filteredUsers.filter(u => 
-      u.name.toLowerCase().includes(search) || 
-      u.email.toLowerCase().includes(search)
-    );
-  }
-  
-  const usersWithoutPasswords = filteredUsers.map(u => ({
-    ...u,
-    password: undefined,
-    created_at: u.created_at || new Date().toISOString()
-  }));
-  
-  res.json({ data: usersWithoutPasswords });
-});
-
-app.post('/api/admin/users', (req, res) => {
-  const { name, email, password, role, phone, specialization, license_number, consultation_fee } = req.body;
-  
-  const newUser = {
-    id: users.length + 1,
-    name,
-    email,
-    password,
-    role: role || 'patient',
-    phone: phone || null,
-    created_at: new Date().toISOString()
-  };
-  
-  users.push(newUser);
-  
-  if (role === 'doctor') {
-    const newDoctor = {
-      id: doctors.length + 1,
-      user_id: newUser.id,
-      specialization: specialization || 'General Medicine',
-      license_number: license_number || `LIC${String(doctors.length + 1).padStart(3, '0')}`,
-      consultation_fee: consultation_fee || 100.00,
-      user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role
-      }
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const filters = {
+      role: req.query.role,
+      search: req.query.search
     };
-    doctors.push(newDoctor);
+    
+    const users = await userModel.findAll(filters);
+    res.json({ data: users });
+  } catch (error) {
+    console.error('Get admin users error:', error);
+    res.status(500).json({ message: 'Failed to fetch users', error: error.message });
   }
-  
-  res.status(201).json({ ...newUser, password: undefined });
 });
 
-app.put('/api/admin/users/:id', (req, res) => {
-  const userId = parseInt(req.params.id);
-  const user = users.find(u => u.id === userId);
-  
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
+app.post('/api/admin/users', async (req, res) => {
+  try {
+    const { name, email, password, role, phone, specialization, license_number, consultation_fee } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await userModel.findByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+    
+    const newUser = await userModel.create({ name, email, password, role, phone });
+    
+    if (role === 'doctor') {
+      await doctorModel.create({
+        user_id: newUser.id,
+        specialization: specialization || 'General Medicine',
+        license_number: license_number || `LIC${Date.now()}`,
+        consultation_fee: consultation_fee || 100.00
+      });
+    }
+    
+    res.status(201).json(newUser);
+  } catch (error) {
+    console.error('Create admin user error:', error);
+    res.status(500).json({ message: 'Failed to create user', error: error.message });
   }
-  
-  const { name, email, password, role, phone } = req.body;
-  
-  if (name) user.name = name;
-  if (email) user.email = email;
-  if (password) user.password = password;
-  if (role) user.role = role;
-  if (phone !== undefined) user.phone = phone;
-  
-  res.json({ ...user, password: undefined });
 });
 
-app.delete('/api/admin/users/:id', (req, res) => {
-  const userId = parseInt(req.params.id);
-  const userIndex = users.findIndex(u => u.id === userId);
-  
-  if (userIndex === -1) {
-    return res.status(404).json({ message: 'User not found' });
+app.put('/api/admin/users/:id', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await userModel.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    const updatedUser = await userModel.update(userId, req.body);
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Update admin user error:', error);
+    res.status(500).json({ message: 'Failed to update user', error: error.message });
   }
-  
-  users.splice(userIndex, 1);
-  
-  // Also remove doctor profile if exists
-  const doctorIndex = doctors.findIndex(d => d.user_id === userId);
-  if (doctorIndex !== -1) {
-    doctors.splice(doctorIndex, 1);
-  }
-  
-  res.json({ message: 'User deleted successfully' });
 });
 
-app.get('/api/admin/appointments', (req, res) => {
-  let filteredAppointments = [...appointments];
-  
-  if (req.query.status) {
-    filteredAppointments = filteredAppointments.filter(a => a.status === req.query.status);
+app.delete('/api/admin/users/:id', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await userModel.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Delete doctor profile if exists (cascade will handle appointments)
+    await doctorModel.deleteByUserId(userId);
+    await userModel.delete(userId);
+    
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete admin user error:', error);
+    res.status(500).json({ message: 'Failed to delete user', error: error.message });
   }
-  
-  if (req.query.date) {
-    filteredAppointments = filteredAppointments.filter(a => a.appointment_date === req.query.date);
-  }
-  
-  if (req.query.doctor_id) {
-    filteredAppointments = filteredAppointments.filter(a => a.doctor_id === parseInt(req.query.doctor_id));
-  }
-  
-  const appointmentsWithDetails = filteredAppointments.map(apt => {
-    const patient = users.find(u => u.id === apt.patient_id);
-    const doctor = doctors.find(d => d.id === apt.doctor_id);
-    return {
-      ...apt,
-      patient: patient ? { ...patient, password: undefined } : null,
-      doctor: doctor ? {
-        ...doctor,
-        user: doctor.user
-      } : null
+});
+
+app.get('/api/admin/appointments', async (req, res) => {
+  try {
+    const filters = {
+      status: req.query.status,
+      date: req.query.date,
+      doctor_id: req.query.doctor_id ? parseInt(req.query.doctor_id) : undefined
     };
-  });
-  
-  res.json({ data: appointmentsWithDetails });
+    
+    const appointments = await appointmentModel.findAll(filters);
+    res.json({ data: appointments });
+  } catch (error) {
+    console.error('Get admin appointments error:', error);
+    res.status(500).json({ message: 'Failed to fetch appointments', error: error.message });
+  }
 });
 
 // Payment routes
@@ -660,7 +525,7 @@ app.post('/api/payments', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Mock API server running on http://localhost:${PORT}`);
+  console.log(`🚀 Healthcare API server running on http://localhost:${PORT}`);
   console.log(`📝 Health check: http://localhost:${PORT}/api/health`);
   console.log(`\nTest credentials:`);
   console.log(`Patient: patient@example.com / password123`);
