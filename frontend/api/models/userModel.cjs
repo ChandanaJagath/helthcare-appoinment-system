@@ -1,8 +1,9 @@
-const pool = require('../config/database');
+const pool = require('../db.cjs');
 const bcrypt = require('bcrypt');
 
 const userModel = {
   async findByEmail(email) {
+    if (!pool) return null;
     try {
       const result = await pool.query(
         'SELECT * FROM users WHERE email = $1',
@@ -15,6 +16,7 @@ const userModel = {
   },
 
   async findById(id) {
+    if (!pool) return null;
     try {
       const result = await pool.query(
         'SELECT id, name, email, role, phone, created_at FROM users WHERE id = $1',
@@ -28,6 +30,7 @@ const userModel = {
 
   async create(userData) {
     const { name, email, password, role, phone } = userData;
+    if (!pool) throw new Error('Database not configured');
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const result = await pool.query(
@@ -45,6 +48,7 @@ const userModel = {
   },
 
   async findAll(filters = {}) {
+    if (!pool) return [];
     try {
       let query = 'SELECT id, name, email, role, phone, created_at FROM users WHERE 1=1';
       const params = [];
@@ -71,6 +75,7 @@ const userModel = {
 
   async update(id, userData) {
     const { name, email, password, role, phone } = userData;
+    if (!pool) throw new Error('Database not configured');
     const updates = [];
     const params = [];
     let paramIndex = 1;
@@ -108,6 +113,7 @@ const userModel = {
   },
 
   async delete(id) {
+    if (!pool) throw new Error('Database not configured');
     try {
       await pool.query('DELETE FROM users WHERE id = $1', [id]);
       return true;
@@ -117,6 +123,7 @@ const userModel = {
   },
 
   async countByRole(role) {
+    if (!pool) return 0;
     try {
       const result = await pool.query(
         'SELECT COUNT(*) as count FROM users WHERE role = $1',
@@ -129,13 +136,14 @@ const userModel = {
   },
 
   async count() {
+    if (!pool) return 0;
     try {
       const result = await pool.query('SELECT COUNT(*) as count FROM users');
       return parseInt(result.rows[0].count, 10);
     } catch (error) {
       throw error;
     }
-  }
+  },
 };
 
 module.exports = userModel;

@@ -1,7 +1,8 @@
-const pool = require('../config/database');
+const pool = require('../db.cjs');
 
 const doctorModel = {
   async findAll() {
+    if (!pool) return [];
     try {
       const result = await pool.query(`
         SELECT 
@@ -41,6 +42,7 @@ const doctorModel = {
   },
 
   async findById(id) {
+    if (!pool) return null;
     try {
       const result = await pool.query(`
         SELECT 
@@ -82,6 +84,7 @@ const doctorModel = {
   },
 
   async findByUserId(userId) {
+    if (!pool) return null;
     try {
       const result = await pool.query(`
         SELECT 
@@ -124,6 +127,7 @@ const doctorModel = {
 
   async create(doctorData) {
     const { user_id, specialization, license_number, consultation_fee } = doctorData;
+    if (!pool) throw new Error('Database not configured');
     try {
       const result = await pool.query(
         'INSERT INTO doctors (user_id, specialization, license_number, consultation_fee) VALUES ($1, $2, $3, $4) RETURNING id',
@@ -135,44 +139,8 @@ const doctorModel = {
     }
   },
 
-  async update(id, doctorData) {
-    const { specialization, license_number, consultation_fee } = doctorData;
-    const updates = [];
-    const params = [];
-    let paramIndex = 1;
-
-    if (specialization !== undefined) {
-      updates.push(`specialization = $${paramIndex++}`);
-      params.push(specialization);
-    }
-    if (license_number !== undefined) {
-      updates.push(`license_number = $${paramIndex++}`);
-      params.push(license_number);
-    }
-    if (consultation_fee !== undefined) {
-      updates.push(`consultation_fee = $${paramIndex++}`);
-      params.push(consultation_fee);
-    }
-
-    if (updates.length === 0) return await this.findById(id);
-    params.push(id);
-    await pool.query(
-      `UPDATE doctors SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-      params
-    );
-    return await this.findById(id);
-  },
-
-  async delete(id) {
-    try {
-      await pool.query('DELETE FROM doctors WHERE id = $1', [id]);
-      return true;
-    } catch (error) {
-      throw error;
-    }
-  },
-
   async deleteByUserId(userId) {
+    if (!pool) throw new Error('Database not configured');
     try {
       await pool.query('DELETE FROM doctors WHERE user_id = $1', [userId]);
       return true;
@@ -182,6 +150,7 @@ const doctorModel = {
   },
 
   async count() {
+    if (!pool) return 0;
     try {
       const result = await pool.query('SELECT COUNT(*) as count FROM doctors');
       return parseInt(result.rows[0].count, 10);

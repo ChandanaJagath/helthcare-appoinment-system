@@ -3,58 +3,54 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
-// Import models
-const userModel = require('./models/userModel');
-const doctorModel = require('./models/doctorModel');
-const appointmentModel = require('./models/appointmentModel');
-const pool = require('./config/database');
+const pool = require('./db.cjs');
+const userModel = require('./models/userModel.cjs');
+const doctorModel = require('./models/doctorModel.cjs');
+const appointmentModel = require('./models/appointmentModel.cjs');
 
 const app = express();
-const PORT = process.env.PORT || 8000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 app.use(cors());
 app.use(express.json());
 
-// Root route - API info (frontend runs on a different port, e.g. http://localhost:5173)
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Healthcare API server',
-    docs: 'Use the frontend at http://localhost:5173 (run: cd frontend && npm run dev)',
-    health: '/api/health',
-    login: 'POST /api/auth/login'
-  });
-});
+function dbUnavailable(res) {
+  return res.status(503).json({ message: 'Database not configured. Set DATABASE_URL in Vercel.' });
+}
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Neon DB connection test
-app.get('/db-test', async (req, res) => {
+// Health check - return 200; optionally verify DB when pool exists
+app.get('/api/health', async (req, res) => {
+  if (!pool) {
+    return res.json({ status: 'ok', message: 'API serverless function is running (no database)' });
+  }
   try {
-    const result = await pool.query('SELECT NOW() as time');
-    res.json(result.rows[0]);
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', message: 'API serverless function is running', database: 'connected' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ status: 'error', message: 'Database connection failed', error: err.message });
   }
 });
+app.get('/health', async (req, res) => {
+  if (!pool) return res.json({ status: 'ok', message: 'API serverless function is running (no database)' });
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', message: 'API serverless function is running', database: 'connected' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', message: 'Database connection failed', error: err.message });
+  }
+});
+app.get('/api', (req, res) => res.json({ status: 'ok', message: 'API serverless function is running' }));
 
-// Auth routes
+// Auth
 app.post('/api/auth/register', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const { name, email, password, role, phone } = req.body;
-    
-    // Check if user already exists
     const existingUser = await userModel.findByEmail(email);
     if (existingUser) {
       return res.status(400).json({ message: 'User with this email already exists' });
     }
-    
     const newUser = await userModel.create({ name, email, password, role, phone });
-    
-    // If doctor role, create doctor profile
     if (role === 'doctor') {
       await doctorModel.create({
         user_id: newUser.id,
@@ -63,7 +59,6 @@ app.post('/api/auth/register', async (req, res) => {
         consultation_fee: req.body.consultation_fee || 100.00
       });
     }
-    
     const token = jwt.sign({ id: newUser.id, role: newUser.role }, JWT_SECRET);
     res.json({ message: 'User registered successfully', user: newUser, token });
   } catch (error) {
@@ -73,19 +68,13 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const { email, password } = req.body;
     const user = await userModel.findByEmail(email);
-    
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    const isValidPassword = await userModel.verifyPassword(password, user.password);
-    if (!isValidPassword) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    const isValid = await userModel.verifyPassword(password, user.password);
+    if (!isValid) return res.status(401).json({ message: 'Invalid credentials' });
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET);
     const userWithoutPassword = await userModel.findById(user.id);
     res.json({ message: 'Login successful', token, user: userWithoutPassword });
@@ -95,25 +84,17 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  res.json({ message: 'Successfully logged out' });
-});
+app.post('/api/auth/logout', (req, res) => res.json({ message: 'Successfully logged out' }));
 
 app.get('/api/auth/me', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthenticated' });
-    }
-    
+    if (!token) return res.status(401).json({ message: 'Unauthenticated' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await userModel.findById(decoded.id);
-    
-    if (user) {
-      res.json(user);
-    } else {
-      res.status(401).json({ message: 'User not found' });
-    }
+    if (user) res.json(user);
+    else res.status(401).json({ message: 'User not found' });
   } catch (error) {
     res.status(401).json({ message: 'Invalid token' });
   }
@@ -121,9 +102,10 @@ app.get('/api/auth/me', async (req, res) => {
 
 // Appointments
 app.get('/api/appointments', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
-    const appointments = await appointmentModel.findAll();
-    res.json({ data: appointments });
+    const data = await appointmentModel.findAll();
+    res.json({ data });
   } catch (error) {
     console.error('Get appointments error:', error);
     res.status(500).json({ message: 'Failed to fetch appointments', error: error.message });
@@ -131,14 +113,11 @@ app.get('/api/appointments', async (req, res) => {
 });
 
 app.post('/api/appointments', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const { doctor_id, appointment_date, appointment_time, duration, reason } = req.body;
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthenticated' });
-    }
-    
+    if (!token) return res.status(401).json({ message: 'Unauthenticated' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const newAppointment = await appointmentModel.create({
       patient_id: decoded.id,
@@ -148,23 +127,20 @@ app.post('/api/appointments', async (req, res) => {
       duration,
       reason
     });
-    
     res.status(201).json(newAppointment);
   } catch (error) {
     console.error('Create appointment error:', error);
-    if (error.message === 'Invalid token') {
-      res.status(401).json({ message: 'Invalid token' });
-    } else {
-      res.status(500).json({ message: 'Failed to create appointment', error: error.message });
-    }
+    if (error.message && error.message.includes('token')) res.status(401).json({ message: 'Invalid token' });
+    else res.status(500).json({ message: 'Failed to create appointment', error: error.message });
   }
 });
 
-// Get all doctors
+// Doctors
 app.get('/api/doctors', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
-    const doctors = await doctorModel.findAll();
-    res.json({ data: doctors });
+    const data = await doctorModel.findAll();
+    res.json({ data });
   } catch (error) {
     console.error('Get doctors error:', error);
     res.status(500).json({ message: 'Failed to fetch doctors', error: error.message });
@@ -172,8 +148,6 @@ app.get('/api/doctors', async (req, res) => {
 });
 
 app.get('/api/appointments/available-slots', (req, res) => {
-  const { doctor_id, date } = req.query;
-  // Generate mock time slots
   const slots = [];
   for (let hour = 9; hour < 17; hour++) {
     slots.push(`${hour.toString().padStart(2, '0')}:00`);
@@ -184,12 +158,10 @@ app.get('/api/appointments/available-slots', (req, res) => {
 
 // Patient routes
 app.get('/api/patients/appointments', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthenticated' });
-    }
-    
+    if (!token) return res.status(401).json({ message: 'Unauthenticated' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const patientAppointments = await appointmentModel.findByPatientId(decoded.id);
     res.json(patientAppointments);
@@ -199,97 +171,31 @@ app.get('/api/patients/appointments', async (req, res) => {
   }
 });
 
-app.get('/api/patients/medical-records', (req, res) => {
-  res.json([]);
-});
-
-app.get('/api/patients/prescriptions', (req, res) => {
-  res.json([]);
-});
+app.get('/api/patients/medical-records', (req, res) => res.json([]));
+app.get('/api/patients/prescriptions', (req, res) => res.json([]));
 
 // Doctor routes
 app.get('/api/doctors/dashboard', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthenticated' });
-    }
-    
+    if (!token) return res.status(401).json({ message: 'Unauthenticated' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const doctor = await doctorModel.findByUserId(decoded.id);
-    
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor profile not found' });
-    }
-    
+    if (!doctor) return res.status(404).json({ message: 'Doctor profile not found' });
     const today = new Date().toISOString().split('T')[0];
     const doctorAppointments = await appointmentModel.findByDoctorId(doctor.id);
-    
     const todayAppointments = doctorAppointments
       .filter(a => a.appointment_date === today && ['pending', 'confirmed'].includes(a.status))
-      .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time));
-    
+      .sort((a, b) => String(a.appointment_time).localeCompare(String(b.appointment_time)));
     const upcomingAppointments = doctorAppointments
       .filter(a => a.appointment_date > today && ['pending', 'confirmed'].includes(a.status))
       .sort((a, b) => {
         const dateCompare = a.appointment_date.localeCompare(b.appointment_date);
-        return dateCompare !== 0 ? dateCompare : a.appointment_time.localeCompare(b.appointment_time);
+        return dateCompare !== 0 ? dateCompare : String(a.appointment_time).localeCompare(String(b.appointment_time));
       })
       .slice(0, 10);
-    
     const uniquePatients = new Set(doctorAppointments.map(a => a.patient_id));
-    
-    // Calculate week start (Monday)
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const weekStart = new Date(now.setDate(diff));
-    weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString().split('T')[0];
-    
-    // Calculate month start
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthStartStr = monthStart.toISOString().split('T')[0];
-    
-    // Get this week's appointments
-    const thisWeekAppointments = doctorAppointments.filter(a => 
-      a.appointment_date >= weekStartStr && a.appointment_date <= today
-    );
-    
-    // Get this month's appointments
-    const thisMonthAppointments = doctorAppointments.filter(a => 
-      a.appointment_date >= monthStartStr
-    );
-    
-    // Get recent patients (last 5 unique patients)
-    const recentPatientIds = [...new Set(doctorAppointments
-      .filter(a => a.appointment_date <= today)
-      .sort((a, b) => {
-        const dateCompare = b.appointment_date.localeCompare(a.appointment_date);
-        return dateCompare !== 0 ? dateCompare : b.appointment_time.localeCompare(a.appointment_time);
-      })
-      .map(a => a.patient_id)
-      .slice(0, 5)
-    )];
-    
-    const recentPatients = recentPatientIds.map(pid => {
-      const patientAppointment = doctorAppointments.find(a => a.patient_id === pid);
-      const patientAppointments = doctorAppointments.filter(a => a.patient_id === pid);
-      return patientAppointment ? {
-        id: patientAppointment.patient.id,
-        name: patientAppointment.patient.name,
-        email: patientAppointment.patient.email,
-        phone: patientAppointment.patient.phone || 'N/A',
-        total_appointments: patientAppointments.length,
-        last_appointment: patientAppointments.length > 0 
-          ? patientAppointments.sort((a, b) => {
-              const dateCompare = b.appointment_date.localeCompare(a.appointment_date);
-              return dateCompare !== 0 ? dateCompare : b.appointment_time.localeCompare(a.appointment_time);
-            })[0].appointment_date
-          : null
-      } : null;
-    }).filter(p => p !== null);
-    
     res.json({
       stats: {
         today_count: todayAppointments.length,
@@ -299,13 +205,11 @@ app.get('/api/doctors/dashboard', async (req, res) => {
         confirmed_count: doctorAppointments.filter(a => a.status === 'confirmed').length,
         cancelled_count: doctorAppointments.filter(a => a.status === 'cancelled').length,
         total_appointments: doctorAppointments.length,
-        this_week_count: thisWeekAppointments.length,
-        this_month_count: thisMonthAppointments.length,
         total_patients: uniquePatients.size
       },
       today_appointments: todayAppointments,
       upcoming_appointments: upcomingAppointments,
-      recent_patients: recentPatients
+      recent_patients: []
     });
   } catch (error) {
     console.error('Doctor dashboard error:', error);
@@ -314,59 +218,39 @@ app.get('/api/doctors/dashboard', async (req, res) => {
 });
 
 app.get('/api/doctors/appointments', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthenticated' });
-    }
-    
+    if (!token) return res.status(401).json({ message: 'Unauthenticated' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const doctor = await doctorModel.findByUserId(decoded.id);
-    
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor profile not found' });
-    }
-    
-    const doctorAppointments = await appointmentModel.findByDoctorId(doctor.id);
-    res.json({ data: doctorAppointments });
+    if (!doctor) return res.status(404).json({ message: 'Doctor profile not found' });
+    const data = await appointmentModel.findByDoctorId(doctor.id);
+    res.json({ data });
   } catch (error) {
     console.error('Get doctor appointments error:', error);
     res.status(401).json({ message: 'Invalid token' });
   }
 });
 
-// Get patient details for doctor
 app.get('/api/doctors/patients/:id', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthenticated' });
-    }
-    
+    if (!token) return res.status(401).json({ message: 'Unauthenticated' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const doctor = await doctorModel.findByUserId(decoded.id);
-    
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor profile not found' });
-    }
-    
+    if (!doctor) return res.status(404).json({ message: 'Doctor profile not found' });
     const patientId = parseInt(req.params.id);
     const patient = await userModel.findById(patientId);
-    
-    if (!patient || patient.role !== 'patient') {
-      return res.status(404).json({ message: 'Patient not found' });
-    }
-    
-    // Get patient's appointments with this doctor
+    if (!patient || patient.role !== 'patient') return res.status(404).json({ message: 'Patient not found' });
     const allAppointments = await appointmentModel.findByDoctorId(doctor.id);
     const patientAppointments = allAppointments
       .filter(a => a.patient_id === patientId)
       .sort((a, b) => {
         const dateCompare = b.appointment_date.localeCompare(a.appointment_date);
-        return dateCompare !== 0 ? dateCompare : b.appointment_time.localeCompare(a.appointment_time);
+        return dateCompare !== 0 ? dateCompare : String(b.appointment_time).localeCompare(String(a.appointment_time));
       });
-    
-    // Mock medical records
     const medicalRecords = patientAppointments
       .filter(a => a.status === 'completed')
       .map((apt, index) => ({
@@ -376,9 +260,8 @@ app.get('/api/doctors/patients/:id', async (req, res) => {
         notes: `Follow-up appointment on ${apt.appointment_date}`,
         created_at: apt.appointment_date
       }));
-    
     res.json({
-      patient: patient,
+      patient,
       appointments: patientAppointments,
       medical_records: medicalRecords,
       stats: {
@@ -395,19 +278,17 @@ app.get('/api/doctors/patients/:id', async (req, res) => {
 
 // Admin routes
 app.get('/api/admin/dashboard', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const today = new Date().toISOString().split('T')[0];
-    
     const appointments = await appointmentModel.findAll();
     const totalUsers = await userModel.count();
     const totalPatients = await userModel.countByRole('patient');
     const totalDoctors = await doctorModel.count();
     const totalRevenue = await appointmentModel.getTotalRevenue();
-    
-    const recentAppointments = appointments
+    const recentAppointments = [...appointments]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 10);
-    
     res.json({
       stats: {
         total_users: totalUsers,
@@ -430,14 +311,11 @@ app.get('/api/admin/dashboard', async (req, res) => {
 });
 
 app.get('/api/admin/users', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
-    const filters = {
-      role: req.query.role,
-      search: req.query.search
-    };
-    
-    const users = await userModel.findAll(filters);
-    res.json({ data: users });
+    const filters = { role: req.query.role, search: req.query.search };
+    const data = await userModel.findAll(filters);
+    res.json({ data });
   } catch (error) {
     console.error('Get admin users error:', error);
     res.status(500).json({ message: 'Failed to fetch users', error: error.message });
@@ -445,17 +323,12 @@ app.get('/api/admin/users', async (req, res) => {
 });
 
 app.post('/api/admin/users', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const { name, email, password, role, phone, specialization, license_number, consultation_fee } = req.body;
-    
-    // Check if user already exists
     const existingUser = await userModel.findByEmail(email);
-    if (existingUser) {
-      return res.status(400).json({ message: 'User with this email already exists' });
-    }
-    
+    if (existingUser) return res.status(400).json({ message: 'User with this email already exists' });
     const newUser = await userModel.create({ name, email, password, role, phone });
-    
     if (role === 'doctor') {
       await doctorModel.create({
         user_id: newUser.id,
@@ -464,7 +337,6 @@ app.post('/api/admin/users', async (req, res) => {
         consultation_fee: consultation_fee || 100.00
       });
     }
-    
     res.status(201).json(newUser);
   } catch (error) {
     console.error('Create admin user error:', error);
@@ -473,14 +345,11 @@ app.post('/api/admin/users', async (req, res) => {
 });
 
 app.put('/api/admin/users/:id', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const userId = parseInt(req.params.id);
     const user = await userModel.findById(userId);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
+    if (!user) return res.status(404).json({ message: 'User not found' });
     const updatedUser = await userModel.update(userId, req.body);
     res.json(updatedUser);
   } catch (error) {
@@ -490,18 +359,13 @@ app.put('/api/admin/users/:id', async (req, res) => {
 });
 
 app.delete('/api/admin/users/:id', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const userId = parseInt(req.params.id);
     const user = await userModel.findById(userId);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    // Delete doctor profile if exists (cascade will handle appointments)
+    if (!user) return res.status(404).json({ message: 'User not found' });
     await doctorModel.deleteByUserId(userId);
     await userModel.delete(userId);
-    
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Delete admin user error:', error);
@@ -510,36 +374,42 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 });
 
 app.get('/api/admin/appointments', async (req, res) => {
+  if (!pool) return dbUnavailable(res);
   try {
     const filters = {
       status: req.query.status,
       date: req.query.date,
       doctor_id: req.query.doctor_id ? parseInt(req.query.doctor_id) : undefined
     };
-    
-    const appointments = await appointmentModel.findAll(filters);
-    res.json({ data: appointments });
+    const data = await appointmentModel.findAll(filters);
+    res.json({ data });
   } catch (error) {
     console.error('Get admin appointments error:', error);
     res.status(500).json({ message: 'Failed to fetch appointments', error: error.message });
   }
 });
 
-// Payment routes
-app.get('/api/payments', (req, res) => {
-  res.json({ data: [] });
-});
+app.get('/api/payments', (req, res) => res.json({ data: [] }));
+app.post('/api/payments', (req, res) => res.status(201).json({ message: 'Payment created', status: 'pending' }));
 
-app.post('/api/payments', (req, res) => {
-  res.status(201).json({ message: 'Payment created', status: 'pending' });
-});
+// Vercel serverless function handler
+module.exports = (req, res) => {
+  const originalUrl = req.url || req.path || '';
+  console.log('Serverless function called:', { method: req.method, originalUrl, path: req.path, query: req.query });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Healthcare API server running on http://localhost:${PORT}`);
-  console.log(`📝 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`\nTest credentials:`);
-  console.log(`Patient: patient@example.com / password123`);
-  console.log(`Doctor: doctor@example.com / password123`);
-  console.log(`Admin: admin@example.com / password123`);
-});
+  let normalizedPath = originalUrl;
+  if (normalizedPath && !normalizedPath.startsWith('/')) normalizedPath = '/' + normalizedPath;
+  if (!normalizedPath || normalizedPath === '/') normalizedPath = '/api/health';
+  else if (!normalizedPath.startsWith('/api')) normalizedPath = '/api' + normalizedPath;
+
+  req.url = normalizedPath;
+  req.path = normalizedPath;
+  req.originalUrl = req.originalUrl || normalizedPath;
+
+  try {
+    return app(req, res);
+  } catch (error) {
+    console.error('Error in serverless function:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+};

@@ -33,22 +33,26 @@ npm install
 
 ### Running the Application
 
-1. **Start Backend Server** (Terminal 1)
+You need **two terminals**: one for the backend, one for the frontend. The app in the browser runs from the **frontend** (port 5173); the backend (port 8000) is only the API.
+
+1. **Start Backend** (Terminal 1)
 ```bash
 cd mock-backend
-node server.js
+npm start
 ```
-Backend runs on: `http://localhost:8000`
+Backend runs on: `http://localhost:8000` (API only; do not open this in the browser for the app).
 
-2. **Start Frontend Server** (Terminal 2)
+2. **Start Frontend** (Terminal 2) — **required for the app UI**
 ```bash
 cd frontend
 npm run dev
 ```
 Frontend runs on: `http://localhost:5173`
 
-3. **Open Browser**
-Navigate to: `http://localhost:5173`
+3. **Open the app in your browser**
+Go to: **http://localhost:5173** (not 8000).
+
+If you see **"Connection refused"** or **ERR_CONNECTION_REFUSED** on port 5173, the frontend is not running — start it with step 2 in a second terminal.
 
 ## Default Login Credentials
 

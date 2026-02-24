@@ -1,11 +1,11 @@
 # Healthcare Backend API Server
 
-A Node.js/Express API server with MySQL database for the Healthcare Appointment System.
+A Node.js/Express API server with **PostgreSQL** (Neon or local) for the Healthcare Appointment System.
 
 ## Prerequisites
 
 - Node.js (v16 or higher)
-- MySQL (v5.7 or higher, or MariaDB)
+- **PostgreSQL** database: [Neon](https://neon.tech) (recommended, free tier) or local PostgreSQL
 - npm
 
 ## Quick Start
@@ -23,13 +23,24 @@ Create a `.env` file in the `mock-backend` directory (copy from `.env.example`):
 cp .env.example .env
 ```
 
-Edit `.env` and set your MySQL credentials:
+**Option A – Neon (recommended)**  
+1. Create a free project at [neon.tech](https://neon.tech).  
+2. Copy the connection string from the Neon dashboard.  
+3. In `.env` set:
+```env
+DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+JWT_SECRET=your-secret-key-change-in-production
+PORT=8000
+```
+
+**Option B – Local PostgreSQL**  
+In `.env` set:
 ```env
 DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_mysql_password
+DB_USER=postgres
+DB_PASSWORD=your_password
 DB_NAME=healthcare_db
-DB_PORT=3307
+DB_PORT=5432
 JWT_SECRET=your-secret-key-change-in-production
 PORT=8000
 ```
@@ -42,7 +53,7 @@ npm run db:init
 ```
 
 This will:
-- Create the database and tables
+- Create the tables in your PostgreSQL database
 - Seed initial users (patient, doctor, admin)
 - Seed doctor profiles
 
@@ -65,7 +76,7 @@ See `database/schema.sql` for the complete schema definition.
 
 ## Features
 
-- ✅ MySQL database persistence
+- ✅ PostgreSQL database (Neon or local)
 - ✅ JWT Authentication with password hashing (bcrypt)
 - ✅ User registration and login
 - ✅ Appointment management API
@@ -118,7 +129,7 @@ After running `npm run db:init`, you can use these credentials:
 ```
 mock-backend/
 ├── config/
-│   └── database.js          # MySQL connection pool
+│   └── database.js          # PostgreSQL connection pool
 ├── database/
 │   ├── schema.sql           # Database schema
 │   └── init.js              # Database initialization script
@@ -136,11 +147,12 @@ mock-backend/
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DB_HOST` | MySQL host | `localhost` |
-| `DB_USER` | MySQL user | `root` |
-| `DB_PASSWORD` | MySQL password | (required) |
+| `DATABASE_URL` | **Neon/PostgreSQL connection string** (recommended) | — |
+| `DB_HOST` | PostgreSQL host (if not using DATABASE_URL) | `localhost` |
+| `DB_USER` | PostgreSQL user | `postgres` |
+| `DB_PASSWORD` | PostgreSQL password | — |
 | `DB_NAME` | Database name | `healthcare_db` |
-| `DB_PORT` | MySQL port | `3307` |
+| `DB_PORT` | PostgreSQL port | `5432` |
 | `JWT_SECRET` | JWT secret key | (change in production!) |
 | `PORT` | Server port | `8000` |
 
@@ -149,18 +161,39 @@ mock-backend/
 - Passwords are hashed using bcrypt before storing in the database
 - Database connection uses connection pooling for better performance
 - Foreign key constraints ensure data integrity
-- All timestamps are automatically managed by MySQL
+- All timestamps are automatically managed by PostgreSQL
 
 ## Troubleshooting
 
+### Server works first time, then "won't start" or "address already in use" on next run
+
+**Cause:** If you close the terminal window without stopping the server (e.g. without pressing **Ctrl+C**), the Node process keeps running in the background and keeps using port 8000. The next time you run `npm start`, port 8000 is still in use, so the new server cannot start.
+
+**Fix:**
+
+1. **Always stop the server with Ctrl+C** in the terminal before closing it.
+2. If you already closed it and port 8000 is in use, free the port before starting again:
+
+   **Windows (PowerShell, run as Administrator if needed):**
+   ```powershell
+   Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+   ```
+   Then run `npm start` again from `mock-backend`.
+
+   **Windows (Command Prompt):** Find the process ID (PID) using port 8000, then kill it:
+   ```cmd
+   netstat -ano | findstr :8000
+   taskkill /PID <PID_from_above> /F
+   ```
+
 ### Database Connection Error
-- Ensure MySQL is running
-- Verify database credentials in `.env`
-- Check if database exists (run `npm run db:init`)
+- **Neon:** Ensure `DATABASE_URL` in `.env` is correct (copy from Neon dashboard; include `?sslmode=require`).
+- **Local:** Ensure PostgreSQL is running; verify `DB_*` credentials in `.env`.
+- Run `npm run db:init` to create tables and seed data.
 
 ### Port Already in Use
-- Change `PORT` in `.env` file
-- Or stop the process using port 8000
+- Change `PORT` in `.env` file (e.g. to 8001), or
+- Stop the process using port 8000 (see "Server works first time, then..." above).
 
 ### Module Not Found
 - Run `npm install` to install dependencies

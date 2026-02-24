@@ -14,6 +14,8 @@ const connectionConfig = process.env.DATABASE_URL
       port: parseInt(process.env.DB_PORT || '5432', 10)
     };
 
-const pool = new Pool(connectionConfig);
+const pool = process.env.DATABASE_URL || process.env.DB_HOST
+  ? new Pool(connectionConfig)
+  : null;
 
 module.exports = pool;

@@ -1,12 +1,16 @@
-const pool = require('../config/database');
+const pool = require('../db.cjs');
 
 function mapAppointmentRow(row) {
+  const appointmentTime = row.appointment_time;
+  const timeStr = typeof appointmentTime === 'string'
+    ? appointmentTime
+    : (appointmentTime && appointmentTime.toISOString ? appointmentTime.toISOString().slice(11, 19) : null);
   return {
     id: row.id,
     patient_id: row.patient_id,
     doctor_id: row.doctor_id,
     appointment_date: row.appointment_date,
-    appointment_time: row.appointment_time,
+    appointment_time: timeStr || row.appointment_time,
     duration: row.duration,
     status: row.status,
     reason: row.reason,
@@ -36,6 +40,7 @@ function mapAppointmentRow(row) {
 
 const appointmentModel = {
   async findAll(filters = {}) {
+    if (!pool) return [];
     try {
       let query = `
         SELECT 
@@ -98,6 +103,7 @@ const appointmentModel = {
   },
 
   async findById(id) {
+    if (!pool) return null;
     try {
       const result = await pool.query(`
         SELECT 
@@ -139,57 +145,14 @@ const appointmentModel = {
 
   async create(appointmentData) {
     const { patient_id, doctor_id, appointment_date, appointment_time, duration, reason } = appointmentData;
+    if (!pool) throw new Error('Database not configured');
     try {
+      const timeVal = appointment_time && appointment_time.length <= 8 ? appointment_time : `${appointment_time}:00`.slice(0, 8);
       const result = await pool.query(
         'INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, duration, status, reason) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [patient_id, doctor_id, appointment_date, appointment_time, duration || 30, 'pending', reason || null]
+        [patient_id, doctor_id, appointment_date, appointment_time || '09:00', duration || 30, 'pending', reason || null]
       );
       return await this.findById(result.rows[0].id);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  async update(id, appointmentData) {
-    const { appointment_date, appointment_time, duration, status, reason } = appointmentData;
-    const updates = [];
-    const params = [];
-    let paramIndex = 1;
-
-    if (appointment_date !== undefined) {
-      updates.push(`appointment_date = $${paramIndex++}`);
-      params.push(appointment_date);
-    }
-    if (appointment_time !== undefined) {
-      updates.push(`appointment_time = $${paramIndex++}`);
-      params.push(appointment_time);
-    }
-    if (duration !== undefined) {
-      updates.push(`duration = $${paramIndex++}`);
-      params.push(duration);
-    }
-    if (status !== undefined) {
-      updates.push(`status = $${paramIndex++}`);
-      params.push(status);
-    }
-    if (reason !== undefined) {
-      updates.push(`reason = $${paramIndex++}`);
-      params.push(reason);
-    }
-
-    if (updates.length === 0) return await this.findById(id);
-    params.push(id);
-    await pool.query(
-      `UPDATE appointments SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-      params
-    );
-    return await this.findById(id);
-  },
-
-  async delete(id) {
-    try {
-      await pool.query('DELETE FROM appointments WHERE id = $1', [id]);
-      return true;
     } catch (error) {
       throw error;
     }
@@ -203,40 +166,8 @@ const appointmentModel = {
     return await this.findAll({ ...filters, patient_id: patientId });
   },
 
-  async countByStatus(status) {
-    try {
-      const result = await pool.query(
-        'SELECT COUNT(*) as count FROM appointments WHERE status = $1',
-        [status]
-      );
-      return parseInt(result.rows[0].count, 10);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  async countByDate(date) {
-    try {
-      const result = await pool.query(
-        'SELECT COUNT(*) as count FROM appointments WHERE appointment_date = $1',
-        [date]
-      );
-      return parseInt(result.rows[0].count, 10);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  async count() {
-    try {
-      const result = await pool.query('SELECT COUNT(*) as count FROM appointments');
-      return parseInt(result.rows[0].count, 10);
-    } catch (error) {
-      throw error;
-    }
-  },
-
   async getTotalRevenue() {
+    if (!pool) return 0;
     try {
       const result = await pool.query(`
         SELECT COALESCE(SUM(d.consultation_fee), 0)::float as total_revenue
